@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cookie Guard – Options</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <h2>Cookie Guard – Options</h2>
+  <h3>Necessary Cookie Allow-List (regex per line)</h3>
+  <textarea id="allowList" rows="6" style="width:100%"></textarea>
+  <h3>Auto-Reject Text Patterns (regex per line)</h3>
+  <textarea id="patterns" rows="6" style="width:100%"></textarea>
+  <div style="margin:8px 0;">
+    <button id="save">Save</button>
+    <button id="export">Export</button>
+    <input id="importFile" type="file" accept="application/json" style="display:none"/>
+    <button id="import">Import</button>
+  </div>
+  <div id="msg" class="small"></div>
+  <script src="./options.js"></script>
+</body>
+</html>

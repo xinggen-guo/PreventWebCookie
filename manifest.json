@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Cookie Guard",
+  "version": "1.2.0",
+  "default_locale": "en",
+  "description": "__MSG_app_desc__",
+  "permissions": [
+    "storage",
+    "cookies",
+    "declarativeNetRequest",
+    "contentSettings",
+    "privacy",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "bg/index.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "ui/popup.html",
+    "default_title": "Cookie Guard"
+  },
+  "options_page": "ui/options.html",
+  "icons": {
+    "128": "assets/icon128.png"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "base",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/auto-consent.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [{
+    "resources": ["content/detectors/*.js"],
+    "matches": ["<all_urls>"]
+  }]
+}
