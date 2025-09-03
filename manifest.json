@@ -13,7 +13,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "*://*/*"
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "bg/index.js",
@@ -44,11 +45,18 @@
       "js": [
         "content/auto-consent.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
-  "web_accessible_resources": [{
-    "resources": ["content/detectors/*.js"],
-    "matches": ["<all_urls>"]
-  }]
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content/detectors/*.js",
+        "util/*.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }
