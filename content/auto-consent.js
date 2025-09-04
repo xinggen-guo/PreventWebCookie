@@ -5,7 +5,7 @@
  */
 
 (async () => {
-    const { logger }   = await import(chrome.runtime.getURL('util/logger.js'));
+    const { logger }   = await import(chrome.runtime.getURL('util/Logger.js'));
     const common     = await import(chrome.runtime.getURL('content/detectors/common.js'));
     const oneTrustMd = await import(chrome.runtime.getURL('content/detectors/oneTrust.js'));
     const didomiMd   = await import(chrome.runtime.getURL('content/detectors/didomi.js'));
@@ -22,11 +22,9 @@
     async function tryAdapters() {
         for (const a of adapters) {
             try {
-                console.log('[CS] auto-consent.js a',a);
                 logger.log('[CS] auto-consent.js a',a);
                 if (a.detect(document)) {
                     const ok = await a.reject(document);
-                    logger.log('[CS] auto-consent.js a ok',ok);
                     if (ok) return true;
                 }
             } catch {}
@@ -34,9 +32,12 @@
         return false;
     }
     async function tryHeuristics() {
-        const ok = await tryHeuristicsFromCommon();
-        logger.log('[CS] auto-consent.js tryHeuristics', ok);
-        return ok;
+        try {
+            return await tryHeuristicsFromCommon();
+        } catch (e) {
+            logger.debug('[CS] heuristic error', e);
+            return false;
+        }
     }
     async function work() {
         if (stopped || inflight) return;

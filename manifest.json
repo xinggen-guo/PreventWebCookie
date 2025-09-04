@@ -45,7 +45,8 @@
       "js": [
         "content/auto-consent.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [
