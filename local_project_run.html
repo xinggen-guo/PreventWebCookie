@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <title>Local Project Runner – auto-consent.js</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root { --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#60a5fa; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444; }
+        html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;}
+        .row{display:flex;height:100%}
+        .left{flex:0 0 460px;background:var(--panel);border-right:1px solid #1f2937;display:flex;flex-direction:column}
+        .right{flex:1;display:flex;flex-direction:column}
+        h2{margin:12px 16px 8px;font-size:16px}
+        .box{margin:8px 16px;background:#0b1220;border:1px solid #1f2937;border-radius:10px;padding:10px}
+        label{display:block;margin:6px 0 4px;color:var(--muted)}
+        input,textarea{width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #334155;background:#0a1322;color:var(--text)}
+        textarea{min-height:80px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+        .rowbtns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+        button{background:#1f2937;color:var(--text);border:1px solid #334155;border-radius:8px;padding:8px 10px;cursor:pointer}
+        button:hover{border-color:#475569}
+        button.primary{background:#0b3c74;border-color:#2563eb}
+        small{color:var(--muted)}
+        .logbar{display:flex;gap:6px;padding:6px 10px;background:#0b1220;border-bottom:1px solid #1f2937}
+        .logbar b{color:#93c5fd}
+        .logs{flex:1;overflow:auto;background:#0b1220}
+        .log{padding:6px 10px;border-bottom:1px dashed #1f2937;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+        .log .t{color:#64748b;margin-right:6px}
+        .log.info{color:#e5e7eb}
+        .log.warn{color:var(--warn)}
+        .log.err{color:var(--err)}
+        iframe{flex:1;border:0;background:white}
+    </style>
+</head>
+<body>
+<div class="row">
+    <div class="left">
+        <h2>① 选择本地网页</h2>
+        <div class="box">
+            <label>HTML 文件（例：BBC - Home.html）</label>
+            <input id="pick_html" type="file" accept=".html,.htm" />
+            <label style="margin-top:10px">资源文件夹（整个 “*_files/” 目录）</label>
+            <input id="pick_res" type="file" webkitdirectory multiple />
+            <div class="rowbtns">
+                <button id="btn_load" class="primary">载入右侧</button>
+            </div>
+            <small>会把 HTML 里的相对链接改写为本地 Blob URL，以在 iframe 中还原页面。</small>
+        </div>
+
+        <h2>② 选择你的项目</h2>
+        <div class="box">
+            <label>项目根目录（选择整个工程根）</label>
+            <input id="pick_proj" type="file" webkitdirectory multiple />
+            <div class="rowbtns">
+                <button id="btn_scan">扫描项目</button>
+            </div>
+            <small>会建立“相对路径 → Blob URL”的映射，用于 <code>chrome.runtime.getURL()</code>。</small>
+        </div>
+
+        <h2>③ 注入设置（入口：auto-consent.js）</h2>
+        <div class="box">
+            <label>按顺序注入的 JS（相对你的项目根），最后必须是 <code>content/auto-consent.js</code></label>
+            <textarea id="in_scripts">util/Logger.js
+content/common.js
+content/detectors/oneTrust.js
+content/detectors/didomi.js
+content/guardian.js
+content/auto-consent.js</textarea>
+            <label>按顺序注入的 CSS（可留空）</label>
+            <textarea id="in_styles">styles/prehide.css</textarea>
+            <div class="rowbtns">
+                <button id="btn_shim">安装 chrome.* shim</button>
+                <button id="btn_inject_css">注入 CSS</button>
+                <button id="btn_inject_js" class="primary">注入并运行入口</button>
+            </div>
+            <small>shim 让你的代码里 <code>chrome.runtime.getURL</code> / <code>chrome.storage</code> 可用；再注入 CSS/JS。</small>
+        </div>
+
+        <h2>④ 片段调试（可选）</h2>
+        <div class="box">
+            <label>在 iframe 内执行一段代码</label>
+            <textarea id="in_snippet">(function(){
+  console.log('[snippet] DOM ready?', !!document.readyState);
+})();</textarea>
+            <div class="rowbtns">
+                <button id="btn_run">Run</button>
+                <button id="btn_clearlog">Clear Log</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="right">
+        <div class="logbar"><b>iFrame Console</b><span id="status"></span></div>
+        <div id="logs" class="logs"></div>
+        <iframe id="view" src="about:blank" referrerpolicy="no-referrer"></iframe>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const $ = (s,p=document)=>p.querySelector(s);
+        const iframe = $('#view');
+        const elStatus = $('#status');
+        const elLogs = $('#logs');
+
+        // ——— 日志工具 ———
+        function log(kind, ...args){
+            const div = document.createElement('div');
+            div.className = 'log ' + kind;
+            const time = new Date().toLocaleTimeString();
+            div.innerHTML = `<span class="t">${time}</span>` + args.map(a=>{
+                if(a instanceof Error) return '[Error] ' + a.message;
+                if(typeof a === 'object') return JSON.stringify(a,null,2);
+                return String(a);
+            }).join(' ');
+            elLogs.appendChild(div);
+            elLogs.scrollTop = elLogs.scrollHeight;
+            console[kind==='err'?'error':(kind==='warn'?'warn':'log')](...args);
+        }
+        function setStatus(t){ elStatus.textContent = ' — ' + t; }
+
+        // ——— 资源映射：本地网页资源 / 本地项目文件 ———
+        const resMap = new Map();   // 目标网页 *_files/ → blob url
+        let projMap = new Map();
+        let projRootPrefix = '';
+        const normPath = (p) =>
+            String(p || '')
+                .replace(/\\/g, '/')
+                .replace(/^\.\//, '')
+                .toLowerCase();
+
+        async function buildProjectMap(fileList) {
+            projMap.clear();
+
+            // 先收集所有相对路径，求公共前缀
+            const rels = [];
+            for (const f of fileList) {
+                // 目录选择时，Chrome 会给 webkitRelativePath；否则退回 name
+                const rp = f.webkitRelativePath || f.name;
+                rels.push(normPath(rp));
+            }
+            projRootPrefix = longestCommonDirPrefix(rels).split('/')[0] || ''; // 仅取第一个目录名
+
+            for (const f of fileList) {
+                const raw = f.webkitRelativePath || f.name;       // 例如 "PreventWebCookie/util/Logger.js"
+                const p   = normPath(raw);                        // -> "preventwebcookie/util/logger.js"
+                const url = URL.createObjectURL(f);
+
+                // 1) 带前缀的完整 key
+                projMap.set(p, url);
+
+                // 2) 去掉根前缀后的 key（如果确实有前缀）
+                if (projRootPrefix && p.startsWith(projRootPrefix + '/')) {
+                    projMap.set(p.slice(projRootPrefix.length + 1), url); // "util/logger.js"
+                }
+            }
+
+            log('ok', '项目文件映射完成：', projMap.size, '条；rootPrefix =', projRootPrefix || '(none)');
+        }
+
+        // 取多个路径的最长公共前缀（目录粒度）
+        function longestCommonDirPrefix(paths) {
+            if (!paths.length) return '';
+            const segs = paths.map(p => normPath(p).split('/'));
+            let i = 0;
+            for (; i < segs[0].length; i++) {
+                const token = segs[0][i];
+                if (!segs.every(s => s[i] === token)) break;
+            }
+            // 只保留目录粒度，比如 "preventwebcookie"
+            return segs[0].slice(0, i).join('/');
+        }
+
+        // 连接 iframe 的 console 到右侧面板
+        iframe.addEventListener('load', ()=>{
+            const w = iframe.contentWindow;
+            ['log','info','warn','error'].forEach(n=>{
+                const orig = w.console[n];
+                w.console[n] = function(...a){
+                    log(n==='error'?'err':(n==='warn'?'warn':'info'), ...a);
+                    orig && orig.apply(w.console, a);
+                };
+            });
+            setStatus('iframe loaded ✔');
+        });
+
+        // —— ① 加载本地网页 —— //
+        const elPickHTML = $('#pick_html');
+        const elPickRes  = $('#pick_res');
+        $('#btn_load').onclick = async () => {
+            const html = elPickHTML.files?.[0];
+            if(!html) return log('err','请先选择 HTML 文件');
+            resMap.clear();
+            for(const f of [...elPickRes.files]){
+                const key = normPath(f.webkitRelativePath || f.name);
+                resMap.set(key, URL.createObjectURL(f));
+            }
+            const text = await new Response(html).text();
+            const doc = new DOMParser().parseFromString(text, 'text/html');
+            const nodes = doc.querySelectorAll('script[src],link[href],img[src],source[src],video[src],audio[src],iframe[src]');
+            let replaced=0, missed=0;
+            nodes.forEach(el=>{
+                const attr = el.hasAttribute('src') ? 'src' : 'href';
+                const v = el.getAttribute(attr);
+                if(!v || /^(https?:)?\/\//i.test(v) || /^data:|^blob:|^mailto:|^javascript:/i.test(v)) return;
+                const k1 = normPath(v), k2 = normPath(decodeURIComponent(v));
+                if(resMap.has(k1)) { el.setAttribute(attr, resMap.get(k1)); replaced++; }
+                else if(resMap.has(k2)) { el.setAttribute(attr, resMap.get(k2)); replaced++; }
+                else { missed++; }
+            });
+            iframe.srcdoc = new XMLSerializer().serializeToString(doc);
+            setStatus(`HTML loaded (replaced ${replaced}, missed ${missed})`);
+            log('info', 'HTML loaded: replaced', replaced, 'missed', missed);
+        };
+
+        // —— ② 扫描项目根目录 —— //
+        const elPickProj = $('#pick_proj');
+        $('#btn_scan').onclick = ()=>{
+            projMap.clear();
+            const files = [...elPickProj.files];
+            files.forEach(f=>{
+                const rel = f.webkitRelativePath || f.name;
+                const key = normPath(rel);
+                const url = URL.createObjectURL(f);
+                projMap.set(key, url);
+            });
+            log('info','项目文件数：', files.length);
+        };
+
+        // —— shim: 让 auto-consent 可用 chrome.* —— //
+        function installChromeShim(){
+            const d = iframe.contentDocument;
+            if(!d){ log('err','iframe not ready'); return; }
+            const code = `
+      (function(){
+        if(window.chrome) return;
+        window.chrome = {
+          runtime: {
+            getURL: (p)=>{
+              var key = (p||'').replace(/^\\.?\\//,'').toLowerCase();
+              var map = window.__PROJ_MAP__;
+              if(map && map[key]) return map[key];
+              return p; // fallback
+            },
+            sendMessage: (m)=>console.debug('[shim] sendMessage', m)
+          },
+          storage:{ local:{ _store:{},
+            get:(k,cb)=>{ var out={}; if(typeof k==='string'){out[k]=this._store[k]} cb&&cb(out); return Promise.resolve(out); },
+            set:(o,cb)=>{ Object.assign(chrome.storage.local._store,o); cb&&cb(); return Promise.resolve(); }
+          }},
+          i18n:{ getMessage:(k)=>k }
+        };
+        console.log('[shim] chrome.* installed');
+      })();
+    `;
+            const s = d.createElement('script'); s.textContent = code;
+            (d.head||d.documentElement).appendChild(s); s.remove();
+            log('info','chrome shim installed');
+        }
+
+        // 把 projMap 注入到页面（供 getURL 查找）
+        function exposeProjMap(){
+            const d = iframe.contentDocument;
+            if(!d){ log('err','iframe not ready'); return; }
+            const obj = {};
+            projMap.forEach((v,k)=>obj[k]=v);
+            const s = d.createElement('script');
+            s.textContent = `window.__PROJ_MAP__ = ${JSON.stringify(obj)}; console.log('[shim] __PROJ_MAP__ loaded', Object.keys(__PROJ_MAP__).length);`;
+            (d.head||d.documentElement).appendChild(s); s.remove();
+        }
+
+        // —— 注入工具（从 projMap 取 blob url） —— //
+        function resolveProjectUrl(relPath) {
+            const k  = normPath(relPath);            // "util/logger.js"
+            const k2 = projRootPrefix ? `${projRootPrefix}/${k}` : k; // "preventwebcookie/util/logger.js"
+
+            // 直接命中
+            if (projMap.has(k))  return projMap.get(k);
+            if (projMap.has(k2)) return projMap.get(k2);
+
+            // 兜底：按后缀匹配（唯一性检查）
+            const suffix = '/' + k;
+            const hits = [...projMap.entries()].filter(([key]) => key.endsWith(suffix));
+            if (hits.length === 1) return hits[0][1];
+
+            log('err', '找不到项目文件：', relPath, ' (尝试 key=', k, ' / ', k2, ', suffix=', suffix, ')');
+            return null;
+        }
+
+        async function injectJSFromProject(relPath) {
+            const url = resolveProjectUrl(relPath);
+            if (!url) return;
+
+            const d = iframe.contentDocument;
+            const s = d.createElement('script');
+            s.src = url;
+            s.onload  = () => { s.remove(); log('ok',  'Injected JS:', relPath); };
+            s.onerror = () => { s.remove(); log('err', 'Inject JS failed:', relPath); };
+            (d.head || d.documentElement).appendChild(s);
+        }
+        async function injectCSSFromProject(relPath){
+            const key = normPath(relPath);
+            const url = projMap.get(key);
+            if(!url){ log('err','找不到项目文件：', relPath); return; }
+            const d = iframe.contentDocument;
+            const l = d.createElement('link');
+            l.rel='stylesheet'; l.href=url;
+            l.onload = ()=> log('info','Injected CSS:', relPath);
+            l.onerror = ()=> log('err','Inject CSS failed:', relPath);
+            (d.head||d.documentElement).appendChild(l);
+        }
+
+        // —— ③ 注入顺序：CSS → JS（最后 auto-consent.js） —— //
+        const elScripts = $('#in_scripts');
+        const elStyles  = $('#in_styles');
+        $('#btn_shim').onclick = ()=>{ exposeProjMap(); installChromeShim(); };
+        $('#btn_inject_css').onclick = async ()=>{
+            const list = elStyles.value.split('\n').map(s=>s.trim()).filter(Boolean);
+            for(const p of list) await injectCSSFromProject(p);
+        };
+        $('#btn_inject_js').onclick = async ()=>{
+            const list = elScripts.value.split('\n').map(s=>s.trim()).filter(Boolean);
+            for(const p of list) await injectJSFromProject(p);
+            log('info','已按顺序注入以上 JS，入口 auto-consent.js 应已执行');
+        };
+
+        // —— ④ 片段 —— //
+        $('#btn_run').onclick = ()=>{
+            const d = iframe.contentDocument;
+            if(!d){ log('err','iframe not ready'); return; }
+            const code = $('#in_snippet').value;
+            const s = d.createElement('script'); s.textContent = code;
+            (d.head||d.documentElement).appendChild(s); s.remove();
+            log('info','Snippet executed');
+        };
+        $('#btn_clearlog').onclick = ()=>{ elLogs.innerHTML=''; };
+    })();
+</script>
+</body>
+</html>

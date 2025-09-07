@@ -281,6 +281,13 @@ export function hideNode(node) {
     node.style.setProperty('pointer-events', 'none', 'important');
 }
 
+function markHidden(el) {
+    if (!el) return;
+    el.style.outline = "3px solid red";   // 红色描边
+    el.style.backgroundColor = "rgba(255,0,0,0.05)"; // 微弱红色背景
+    console.debug("[PreventWebCookie] would hide:", el);
+}
+
 // 解除常见滚动锁
 export function unlockScroll() {
     document.documentElement?.style.setProperty('overflow', 'auto', 'important');
@@ -375,6 +382,7 @@ export async function tryHeuristics() {
         || banner
         || btn.parentElement
         || btn;
+    // markHidden(target)
     hideNode(target);
 
     // 解除滚动锁
