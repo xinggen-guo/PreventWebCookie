@@ -32,7 +32,7 @@ const REJECT_RE_LIST = [
 
 
 // 明确排除：典型导航/抽屉/汉堡菜单相关
-const EXCLUDE_CONTAINER_RE = /(header|nav|menu|drawer|hamburger)/i;
+const EXCLUDE_CONTAINER_RE = /(header|nav|menu|drawer|hamburger|^root$)/i;
 
 
 function normText(el) {
@@ -151,9 +151,9 @@ function looksLikeCookieBanner(node) {
     const shapeCandidate =
         isBottomOverlay(node) ||
         isCenterModal(node) ||
-        classHint ||
-        percentLarge ||
-        (['fixed', 'sticky'].includes(cs.position) && (bigBlock || percentLarge) && hasButtons);
+        ((classHint || percentLarge) &&
+            (['fixed', 'sticky'].includes(cs.position) || bigBlock) &&
+            hasButtons);
 
     if (!shapeCandidate) return false;
 
@@ -244,10 +244,8 @@ function findRejectButton(banner) {
         if (!manageCandidate && /\b(manage|settings?|preferences?)\b/i.test(label)) {
             manageCandidate = btn;
         }
-        // ====== 修改到这里结束 ======
-
     }
-    return manageCandidate || null;
+    return manageCandidate;
 }
 
 // OneTrust: 精确获取弹窗根节点和遮罩
