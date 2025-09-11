@@ -375,19 +375,21 @@ export async function tryHeuristics() {
     const btn = findRejectButton(banner);
     logger.log('[CS] reject button =>', btn, btn && normText(btn));
     if (!btn) return false;
+    btn.click()
 
-    const target = btn.closest('[role="dialog"], [aria-modal="true"], .cookie-banner, .consent, .privacy')
-        || banner
-        || btn.parentElement
-        || btn;
-    // markHidden(target)
-    hideNode(target);
-
-    // 解除滚动锁
-    unlockScroll();
-
-    // 只有在确认消失后，才当作 handled
-    const gone = !isVisible(target);
-    logger.log('[CS] hidden OneTrust =>', {gone});
+    //i need more confirm this is cookie dialog then i can hide it, or to click is prefect
+    // const target = btn.closest('[role="dialog"], [aria-modal="true"], .cookie-banner, .consent, .privacy')
+    //     || banner
+    //     || btn.parentElement
+    //     || btn;
+    // // markHidden(target)
+    // hideNode(target);
+    //
+    // // 解除滚动锁
+    // unlockScroll();
+    //
+    // // 只有在确认消失后，才当作 handled
+    // const gone = !isVisible(target);
+    // logger.log('[CS] hidden OneTrust =>', {gone});
     return true;
 }
