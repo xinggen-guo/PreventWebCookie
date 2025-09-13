@@ -254,6 +254,7 @@ function findRejectButton(banner) {
         // 2) 去重（同一个按钮的不同子节点会反复命中）
         if (seen.has(btn)) continue;
         seen.add(btn);
+        logger.log('[CS] handAndActReject =>btn  ',btn);
 
         // 3) 必须可见再考虑
         if (!isVisible(btn)) continue;
